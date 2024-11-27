@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as panda
 import networkx as nx
+import plotly.graph_objects as go
+import random
+from itertools import islice
 
 ## this file has to be able to add a stochastic array of points over a given map,
 ## together with foodsources (FS)
@@ -10,12 +13,13 @@ import networkx as nx
 G = nx.Graph()
 
 # Define the grid dimensions
-rows, cols = 10, 10
-min_distance = np.sqrt(2)
+rows, cols = 5,5
+min_distance = np.sqrt(2)-0.2       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
+r = 1                               # starting radius for all tubes
 # Add nodes in a 10x10 grid
 for i in range(rows):
     for j in range(cols):
-        G.add_node((i, j))
+        G.add_node((i, j), FS = 0)
         # Set up positions for a 10x10 grid
         # standerd deviation
         sd = 0.2
@@ -32,16 +36,118 @@ for i in range(rows):
                     pos_nb_j = pos_nb[1]
                 # Calculate distance
                     distance = np.sqrt((pos_center_i- pos_nb_i) ** 2 + (pos_center_j - pos_nb_j) ** 2)
-                    if distance <= min_distance:
-                        G.add_edge((i, j), (x, y))
+                    if distance < min_distance:
+                        G.add_edge((i, j), (x, y), length = distance, radius = r)
+                ## There is something wrong in this process. Not all aedges are made correctly in some cases.
+                ## FIGURE THIS OUT LATER???
 
 
 
 # Draw the graph
 plt.figure()
-nx.draw(G, pos, node_size=5, node_color="red", with_labels=False)
-plt.show()
+nx.draw(G, pos, node_size=5, node_color="red", with_labels=True)
+
 ## It works !!
 
 ## Now we need to implement food sources = FS and the tube size = TS. Also this tube size has to 
-# change with every iteration dt. according to 
+# change with every iteration dt. according to the paper.
+
+## FOOD SOURCES (FS)
+# lets try one FS to start with.
+#  make a second dict but now with FS values; set all to zero and manually overwrite one
+
+# for i in range(rows):
+#     for j in range(cols):
+#         FS = {(i,j) : (0,0) for i in range(rows) for j in range(cols)}
+FS = {}
+FS[(0,0)] = 10
+FS[(0,4)] = 10
+FS[(4,0)] = 10
+FS[(4,4)] = 10
+FS[(2,2)] = 10
+
+print(f"The nodes containing food are: {FS}")
+
+## ITERATION OF FLOW: we need a few paramaters defined;
+
+# Q_ij = pi*r^4(p_j-p_i)/8*mu*L_ij      -Poisseuille flow
+# here D_ij(r) could be pi*r^4/8*mu      - this would be the variable responding to the usage of tube.
+# L_ij is the edge lenght of two nodes i and j.
+# p_i is set as the only source of positive pressure and p_j is ?zero? 
+
+# Every iteration we:
+# 1.Select source and sink nodes
+# 2.Find possible paths
+# 3.Find Q_ij
+# 4.adjsut r's
+# 5.repeat
+
+# We are going to limit the different paths by assumimg the mold has a sense of direction and by adhereing to the rule:
+# the sum of the outflows at Qsource is equal to the sum of the inflows at Qsink. Meaning if the source has 5 edges
+# we will look for 5 different paths to the sink node and share flow over these paths accordingly.
+# While also only considering a flow if the next node is closer to the sink node then preciously. 
+
+# ---
+#  1  Select Nodes
+# ---
+def select_source_and_sink_nodes(FS):
+    FS_source = random.choice(list(FS.keys()))
+    FS_sink = random.choice(list(FS.keys()))
+    while FS_source == FS_sink:
+        FS_source = random.choice(list(FS.keys()))
+        FS_sink = random.choice(list(FS.keys()))
+    Nodes = [FS_source, FS_sink]
+    return Nodes
+
+
+# ---
+#  2  Find paths
+# ---
+# this is a build-in library of networkx
+def k_shortest_paths(G, Nodes, k, weight='lenght'):
+    paths_list = list(
+        islice(nx.shortest_simple_paths(G, Nodes[0], Nodes[1], weight=weight), k))
+    return  paths_list
+
+
+# ---
+#  3
+# ---
+
+
+# ---
+#  4  Find path lengths
+# ---
+def Length_of_paths(paths_list):
+    length_of_paths_list = [sum(G[u][v]['length'] for u, v in zip(path, path[1:]))
+    for path in paths_list]
+    return length_of_paths_list
+
+# ---
+#  4  Find flow distr.
+# ---
+
+# to find the distribuiton we not only need the total path taken but also the radius and lenght of every individual
+# tube. This way we ca make an electrical circuit analogy of current distribution based on total resistance of a path.
+
+def find_flow_distribution(length_of_paths_list):
+    Q = {}
+    for i in range(0,k,1):
+        Q[i] = []
+    return
+
+
+# ---
+#  T  Test code
+# ---
+
+# 1.
+Nodes = select_source_and_sink_nodes(FS)
+print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
+# 2. 
+k = 4
+list_of_paths = k_shortest_paths(G,Nodes,k)
+print(f"the {k} shortest possible paths are:{list_of_paths}")
+length_of_path_list = Length_of_paths(list_of_paths)
+print(f"their respective lengths are: {length_of_path_list}")
+plt.show()
