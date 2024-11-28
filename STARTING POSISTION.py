@@ -12,23 +12,33 @@ from itertools import islice
 # Create an empty graph
 G = nx.Graph()
 
-# Define the grid dimensions
+# Define the grid dimensions and constants
 rows, cols = 5,5
-min_distance = np.sqrt(2)-0.2       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
+min_distance = np.sqrt(2)       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
 r = 1                               # starting radius for all tubes
+mu = 1                              # dynamic viscocity of water (not 1 but yk)
+pos_dict = {}                            # posistion dictionary for every node
+sd = 0.15                            # standard deviation
 # Add nodes in a 10x10 grid
 for i in range(rows):
     for j in range(cols):
-        G.add_node((i, j), FS = 0)
         # Set up positions for a 10x10 grid
         # standerd deviation
-        sd = 0.2
-        pos = {(i, j): (j + np.random.normal(loc=0,scale=sd, size=None) , -i + np.random.normal(loc=0,scale=sd, size=None) ) for i in range(rows) for j in range(cols)}
-        # Check all other nodes in the grid to see if they meet the distance condition # lots of room for optimizatin in this loop
+        pos_i = j + np.random.normal(loc=0,scale=sd, size=None) 
+        pos_j = -i + np.random.normal(loc=0,scale=sd, size=None) 
+        pos_dict[(i, j)] = (pos_i , pos_j )
+        G.add_node((i, j), pos=(pos_i, pos_j), FS = 0)
+# Retrieve the positions for all nodes
+pos = nx.get_node_attributes(G, 'pos')
+
+# Check all other nodes in the grid to see if they meet the distance condition 
+# lots of room for optimizatin in this loop
+for i in range(rows):
+    for j in range(cols):
         for x in range(rows):
             for y in range(cols):
-                pos_center = pos.get((i,j))
-                pos_nb = pos.get((x,y))
+                pos_center = pos_dict.get((i,j))
+                pos_nb = pos_dict.get((x,y))
                 if pos_nb != pos_center:
                     pos_center_i = pos_center[0]
                     pos_center_j = pos_center[1]
@@ -38,16 +48,15 @@ for i in range(rows):
                     distance = np.sqrt((pos_center_i- pos_nb_i) ** 2 + (pos_center_j - pos_nb_j) ** 2)
                     if distance < min_distance:
                         G.add_edge((i, j), (x, y), length = distance, radius = r)
-                ## There is something wrong in this process. Not all aedges are made correctly in some cases.
-                ## FIGURE THIS OUT LATER???
+
 
 
 
 # Draw the graph
 plt.figure()
 nx.draw(G, pos, node_size=5, node_color="red", with_labels=True)
-
-## It works !!
+plt.show()
+# ## It works !!
 
 ## Now we need to implement food sources = FS and the tube size = TS. Also this tube size has to 
 # change with every iteration dt. according to the paper.
@@ -104,9 +113,8 @@ def select_source_and_sink_nodes(FS):
 #  2  Find paths
 # ---
 # this is a build-in library of networkx
-def k_shortest_paths(G, Nodes, k, weight='lenght'):
-    paths_list = list(
-        islice(nx.shortest_simple_paths(G, Nodes[0], Nodes[1], weight=weight), k))
+def k_shortest_paths(G, Nodes, k, weight='length'):
+    paths_list = list(islice(nx.shortest_simple_paths(G, Nodes[0], Nodes[1], weight=weight), k))
     return  paths_list
 
 
@@ -116,12 +124,19 @@ def k_shortest_paths(G, Nodes, k, weight='lenght'):
 
 
 # ---
-#  4  Find path lengths
+#  4  Find path resistivity
 # ---
-def Length_of_paths(paths_list):
-    length_of_paths_list = [sum(G[u][v]['length'] for u, v in zip(path, path[1:]))
+
+# we need to make a function that returns the resitivity of a path.
+# using the poisseuille definition of tube flow resistance: R = (8*L*mu)/(pi*r^4)
+def Calc_Resistance(L,r):
+    resistance = (8*L*mu)/(np.pi*(r)**4)
+    return resistance
+
+def Resistance_of_paths(paths_list):
+    resistance_of_paths_list = [sum(Calc_Resistance(G[u][v]['length'], G[u][v]['radius']) for u, v in zip(path, path[1:]))
     for path in paths_list]
-    return length_of_paths_list
+    return resistance_of_paths_list
 
 # ---
 #  4  Find flow distr.
@@ -130,7 +145,7 @@ def Length_of_paths(paths_list):
 # to find the distribuiton we not only need the total path taken but also the radius and lenght of every individual
 # tube. This way we ca make an electrical circuit analogy of current distribution based on total resistance of a path.
 
-def find_flow_distribution(length_of_paths_list):
+def find_flow_distribution(resistance_of_paths_list):
     Q = {}
     for i in range(0,k,1):
         Q[i] = []
@@ -141,13 +156,15 @@ def find_flow_distribution(length_of_paths_list):
 #  T  Test code
 # ---
 
-# 1.
+# 1. Select nodes
 Nodes = select_source_and_sink_nodes(FS)
 print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
-# 2. 
+# 2. Find paths
 k = 4
 list_of_paths = k_shortest_paths(G,Nodes,k)
 print(f"the {k} shortest possible paths are:{list_of_paths}")
-length_of_path_list = Length_of_paths(list_of_paths)
-print(f"their respective lengths are: {length_of_path_list}")
+# 3. Calc resistance
+resistance_of_path_list = Resistance_of_paths(list_of_paths)
+print(f"their respective resistances are: {resistance_of_path_list}")
+# 4. divide flow
 plt.show()
