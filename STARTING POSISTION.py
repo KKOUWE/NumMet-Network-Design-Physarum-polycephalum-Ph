@@ -14,11 +14,13 @@ G = nx.Graph()
 
 # Define the grid dimensions and constants
 rows, cols = 5,5
-min_distance = np.sqrt(2)       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
+min_distance = np.sqrt(2)+0.1       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
 r = 1                               # starting radius for all tubes
 mu = 1                              # dynamic viscocity of water (not 1 but yk)
-pos_dict = {}                            # posistion dictionary for every node
-sd = 0.15                            # standard deviation
+pos_dict = {}                       # posistion dictionary for every node
+sd = 0.2                            # standard deviation
+I_0 = 1                             # Normalized flow/current
+k = 4                               # number of paths
 # Add nodes in a 10x10 grid
 for i in range(rows):
     for j in range(cols):
@@ -55,7 +57,6 @@ for i in range(rows):
 # Draw the graph
 plt.figure()
 nx.draw(G, pos, node_size=5, node_color="red", with_labels=True)
-plt.show()
 # ## It works !!
 
 ## Now we need to implement food sources = FS and the tube size = TS. Also this tube size has to 
@@ -87,9 +88,11 @@ print(f"The nodes containing food are: {FS}")
 # Every iteration we:
 # 1.Select source and sink nodes
 # 2.Find possible paths
-# 3.Find Q_ij
-# 4.adjsut r's
-# 5.repeat
+# 3.Find resistance
+# 4.Find flow per tube
+# 5.adjust r per tube
+# 6.repeat
+
 
 # We are going to limit the different paths by assumimg the mold has a sense of direction and by adhereing to the rule:
 # the sum of the outflows at Qsource is equal to the sum of the inflows at Qsink. Meaning if the source has 5 edges
@@ -119,16 +122,11 @@ def k_shortest_paths(G, Nodes, k, weight='length'):
 
 
 # ---
-#  3
+#  3  Find path resistivity
 # ---
-
-
-# ---
-#  4  Find path resistivity
-# ---
-
 # we need to make a function that returns the resitivity of a path.
 # using the poisseuille definition of tube flow resistance: R = (8*L*mu)/(pi*r^4)
+
 def Calc_Resistance(L,r):
     resistance = (8*L*mu)/(np.pi*(r)**4)
     return resistance
@@ -139,17 +137,27 @@ def Resistance_of_paths(paths_list):
     return resistance_of_paths_list
 
 # ---
-#  4  Find flow distr.
+#  4  Find flow per path and thus tube
 # ---
-
-# to find the distribuiton we not only need the total path taken but also the radius and lenght of every individual
-# tube. This way we ca make an electrical circuit analogy of current distribution based on total resistance of a path.
+# we can make an electrical circuit analogy of current distribution based on total resistance of a path.
 
 def find_flow_distribution(resistance_of_paths_list):
+    total_resistance = sum(resistance_of_paths_list)
     Q = {}
     for i in range(0,k,1):
-        Q[i] = []
-    return
+        Q[i+1] = (total_resistance/(resistance_of_paths_list[i]+total_resistance))*I_0
+    return Q
+
+
+
+
+
+
+# ---
+#  4  
+# ---
+
+
 
 
 # ---
@@ -160,11 +168,11 @@ def find_flow_distribution(resistance_of_paths_list):
 Nodes = select_source_and_sink_nodes(FS)
 print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
 # 2. Find paths
-k = 4
+
 list_of_paths = k_shortest_paths(G,Nodes,k)
 print(f"the {k} shortest possible paths are:{list_of_paths}")
 # 3. Calc resistance
-resistance_of_path_list = Resistance_of_paths(list_of_paths)
-print(f"their respective resistances are: {resistance_of_path_list}")
+resistance_of_paths_list = Resistance_of_paths(list_of_paths)
+print(f"their respective resistances are: {resistance_of_paths_list}")
 # 4. divide flow
 plt.show()
