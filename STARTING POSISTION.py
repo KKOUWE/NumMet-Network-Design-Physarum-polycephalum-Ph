@@ -21,6 +21,9 @@ pos_dict = {}                       # posistion dictionary for every node
 sd = 0.2                            # standard deviation
 I_0 = 1                             # Normalized flow/current
 k = 4                               # number of paths
+gamma = 1.8                         # constant that determines non linearity of radius response to flow. Present in dRdt function.
+dR = np.pi*r/8*mu                   # reduction of radius term. present in dRdt function
+
 # Add nodes in a 10x10 grid
 for i in range(rows):
     for j in range(cols):
@@ -63,12 +66,6 @@ nx.draw(G, pos, node_size=5, node_color="red", with_labels=True)
 # change with every iteration dt. according to the paper.
 
 ## FOOD SOURCES (FS)
-# lets try one FS to start with.
-#  make a second dict but now with FS values; set all to zero and manually overwrite one
-
-# for i in range(rows):
-#     for j in range(cols):
-#         FS = {(i,j) : (0,0) for i in range(rows) for j in range(cols)}
 FS = {}
 FS[(0,0)] = 10
 FS[(0,4)] = 10
@@ -142,23 +139,41 @@ def Resistance_of_paths(paths_list):
 # we can make an electrical circuit analogy of current distribution based on total resistance of a path.
 
 def find_flow_distribution(resistance_of_paths_list):
-    total_resistance = sum(resistance_of_paths_list)
+    inverted_res_list = [(1/s) for s in resistance_of_paths_list]
     Q = {}
     for i in range(0,k,1):
-        Q[i+1] = (total_resistance/(resistance_of_paths_list[i]+total_resistance))*I_0
+        # calculate while consdidering parallel posistioning of tubes so: 1/Rt = 1/R1 + 1/R2 +...
+        total_resistance_i = (sum(inverted_res_list) - inverted_res_list[i])**-1
+        Q[i] = (total_resistance_i/(resistance_of_paths_list[i]+total_resistance_i))*I_0
     return Q
 
-
-
-
+# now that we know the flow per path we need to keep track of the flow per tube:
+def find_flow_per_tube(list_of_paths, Q):
+    # initialise all edges with flow zero
+    flow_per_tube = {edge : 0 for edge in G.edges()}
+    a=0
+    for path in list_of_paths:
+        for u, v in zip(path, path[1:]):
+            flow_per_tube[(u,v)] += Q.get(a)
+        a+=1
+    return flow_per_tube
 
 
 # ---
-#  4  
+#  5  Adjust r's
 # ---
+# We need to adjust the value of every r of every edge after every timestep iter to accomodate the 
+# addapting behaviour of the mold
+
+def Adjust_radius(flow_per_tube):
+    for u,v in G.edges():       # applies drdt function,sigmoid minus constant, to every edge.
+        G[u][v]['radius'] += ((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma) - dR
+    return # returns nothing, simply adjusts existing edge attributes 'radius'
 
 
-
+# ---
+#  6  Repeat timesteps iterations until network reaches certain convergence conditions
+# ---
 
 # ---
 #  T  Test code
@@ -175,4 +190,9 @@ print(f"the {k} shortest possible paths are:{list_of_paths}")
 resistance_of_paths_list = Resistance_of_paths(list_of_paths)
 print(f"their respective resistances are: {resistance_of_paths_list}")
 # 4. divide flow
+Q = find_flow_distribution(resistance_of_paths_list)
+print(f'the distribution of flow trough each path is: {Q}')
+print(f'Sum is one check: {sum(Q.values())}')
+flow_per_tube = find_flow_per_tube(list_of_paths, Q)
+print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
 plt.show()
