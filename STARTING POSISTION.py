@@ -22,8 +22,9 @@ sd = 0.2                            # standard deviation
 I_0 = 1                             # Normalized flow/current
 k = 4                               # number of paths
 gamma = 1.8                         # constant that determines non linearity of radius response to flow. Present in dRdt function.
-dR = np.pi*r/8*mu                   # reduction of radius term. present in dRdt function
-
+dR = (np.pi*r/8*mu)*0.01            # reduction of radius term. present in dRdt function
+t = 0                               # timestep initialisation
+convergence = False                 # Convergence init.
 # Add nodes in a 10x10 grid
 for i in range(rows):
     for j in range(cols):
@@ -54,13 +55,11 @@ for i in range(rows):
                     if distance < min_distance:
                         G.add_edge((i, j), (x, y), length = distance, radius = r)
 
-
-
-
-# Draw the graph
-plt.figure()
-nx.draw(G, pos, node_size=5, node_color="red", with_labels=True)
-# ## It works !!
+# # Draw the graph
+# plt.figure()
+# nx.draw(G, pos, node_size=5, node_color="red", with_labels=True)
+# plt.title(f"Network at t={t}")
+# plt.show()
 
 ## Now we need to implement food sources = FS and the tube size = TS. Also this tube size has to 
 # change with every iteration dt. according to the paper.
@@ -150,11 +149,11 @@ def find_flow_distribution(resistance_of_paths_list):
 # now that we know the flow per path we need to keep track of the flow per tube:
 def find_flow_per_tube(list_of_paths, Q):
     # initialise all edges with flow zero
-    flow_per_tube = {edge : 0 for edge in G.edges()}
+    flow_per_tube = {tuple(sorted(edge)) : 0 for edge in G.edges()}
     a=0
     for path in list_of_paths:
         for u, v in zip(path, path[1:]):
-            flow_per_tube[(u,v)] += Q.get(a)
+            flow_per_tube[tuple(sorted((u,v)))] += Q.get(a)
         a+=1
     return flow_per_tube
 
@@ -168,31 +167,95 @@ def find_flow_per_tube(list_of_paths, Q):
 def Adjust_radius(flow_per_tube):
     for u,v in G.edges():       # applies drdt function,sigmoid minus constant, to every edge.
         G[u][v]['radius'] += ((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma) - dR
+        if G[u][v]['radius'] < 0:
+            G[u][v]['radius'] = 0       # ensure radius min caps at 0 
     return # returns nothing, simply adjusts existing edge attributes 'radius'
 
 
 # ---
 #  6  Repeat timesteps iterations until network reaches certain convergence conditions
 # ---
+# we want to repeat all the above per timestep as long as some convergence condictions are not met.
+# This means we have to define the convergence conditions.
+# Create timestep functionallity.
+# and add color functionality of plots with ech iter, where we want to correlate edge thickness and opacity to the radius of a tube.
+
+# Convergence conditions: for now set to do 100 iters
+def Check_convergence(convergence):
+    if t == 100:
+        convergence = True
+    return convergence
+
+# ITER LOOP:
+while convergence == False:
+    # 1. Select nodes
+    Nodes = select_source_and_sink_nodes(FS)
+    print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
+
+    # 2. Find paths
+    list_of_paths = k_shortest_paths(G,Nodes,k)
+    print(f"the {k} shortest possible paths are:{list_of_paths}")
+
+    # 3. Calc resistance
+    resistance_of_paths_list = Resistance_of_paths(list_of_paths)
+    print(f"their respective resistances are: {resistance_of_paths_list}")
+
+    # 4. divide flow
+    Q = find_flow_distribution(resistance_of_paths_list)
+    print(f'the distribution of flow trough each path is: {Q}')
+    print(f'Sum is one check: {sum(Q.values())}')
+    flow_per_tube = find_flow_per_tube(list_of_paths, Q)
+    print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
+
+    # 5. Adjust radius
+    next_rad = Adjust_radius(flow_per_tube)
+    radius_list = [G[u][v]['radius'] for u,v in G.edges]
+    print(f'the new radia are: {radius_list}')
+
+    # Draw the graph
+    plt.figure()
+    plt.title(f"Network at t={t}")
+    # normalize opacity
+    max_r = max(radius_list)
+    edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
+    edge_width = [(r/max_r) for r in radius_list]
+    nx.draw(
+    G,
+    pos,
+    with_labels = True,
+    node_color = 'red',
+    node_size = 5,
+    width = edge_width,
+    )
+    t+=1
+    # Convergence check
+    convergence = Check_convergence(convergence)
+    # final composing
+    plt.show()
+
+    
+
+
+
 
 # ---
 #  T  Test code
 # ---
 
-# 1. Select nodes
-Nodes = select_source_and_sink_nodes(FS)
-print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
-# 2. Find paths
+# # 1. Select nodes
+# Nodes = select_source_and_sink_nodes(FS)
+# print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
+# # 2. Find paths
 
-list_of_paths = k_shortest_paths(G,Nodes,k)
-print(f"the {k} shortest possible paths are:{list_of_paths}")
-# 3. Calc resistance
-resistance_of_paths_list = Resistance_of_paths(list_of_paths)
-print(f"their respective resistances are: {resistance_of_paths_list}")
-# 4. divide flow
-Q = find_flow_distribution(resistance_of_paths_list)
-print(f'the distribution of flow trough each path is: {Q}')
-print(f'Sum is one check: {sum(Q.values())}')
-flow_per_tube = find_flow_per_tube(list_of_paths, Q)
-print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
-plt.show()
+# list_of_paths = k_shortest_paths(G,Nodes,k)
+# print(f"the {k} shortest possible paths are:{list_of_paths}")
+# # 3. Calc resistance
+# resistance_of_paths_list = Resistance_of_paths(list_of_paths)
+# print(f"their respective resistances are: {resistance_of_paths_list}")
+# # 4. divide flow
+# Q = find_flow_distribution(resistance_of_paths_list)
+# print(f'the distribution of flow trough each path is: {Q}')
+# print(f'Sum is one check: {sum(Q.values())}')
+# flow_per_tube = find_flow_per_tube(list_of_paths, Q)
+# print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
+
