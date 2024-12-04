@@ -169,8 +169,9 @@ def find_flow_per_tube(list_of_paths, Q):
 
 def Adjust_radius(flow_per_tube):
     # applies drdt function,sigmoid minus constant, to every edge.
+    # the increase is reduced because it lowers the dependence on randomness of the first few calculations.
     for u,v in G.edges():
-        G[u][v]['radius'] += ((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma) - dR
+        G[u][v]['radius'] += 0.2*((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma) - dR
         if G[u][v]['radius'] < 0:
             G[u][v]['radius'] = 0       # ensure radius min caps at 0 
     return # returns nothing, simply adjusts existing edge attributes 'radius'
