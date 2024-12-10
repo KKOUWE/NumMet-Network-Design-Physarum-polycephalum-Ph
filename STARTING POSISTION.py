@@ -1,10 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as panda
 import networkx as nx
 import plotly.graph_objects as go
 import random
 from itertools import islice
+import pickle
+import os
+import shutil
 
 ## this file has to be able to add a stochastic array of points over a given map,
 ## together with foodsources (FS)
@@ -15,14 +17,13 @@ G = nx.Graph()
 # Define the grid dimensions and constants
 rows, cols = 50,50
 min_distance = np.sqrt(2)+0.1       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
-r = 1                               # starting radius for all tubes
-mu = 1                              # dynamic viscocity of water (not 1 but yk)
+r = 1E-3                            # starting radius for all tubes
+mu = 8.9E-4                         # dynamic viscocity of water (not 1 but yk)
 pos_dict = {}                       # posistion dictionary for every node
 sd = 0.2                            # standard deviation
-I_0 = 1                             # Normalized flow/current
-k = 4                               # number of paths
-gamma = 1.8                         # constant that determines non linearity of radius response to flow. Present in dRdt function.
-dR = (np.pi*r/8*mu)*0.01            # reduction of radius term. present in dRdt function
+I_0 = 2                             # Normalized flow/current
+k = 6                               # number of paths
+gamma = 1.8                         # constant that determines non linearity of radius response to flow. Present in dRdt function.         
 t = 0                               # timestep initialisation
 convergence = False                 # Convergence init.
 # Add nodes in a 10x10 grid
@@ -67,11 +68,17 @@ for i in range(rows):
 FS = {}
 FS[(0,0)] = 10
 FS[(0,(cols-1))] = 10
+FS[(round(rows/2),round(cols/5))] = 10
+FS[(round(rows/2),round(cols*4/5))] = 10
 FS[((rows-1),0)] = 10
 FS[((rows-1),(cols-1))] = 10
-FS[(round(rows/2),round(cols/2))] = 10
-
-print(f"The nodes containing food are: {FS}")
+#FS[(round(rows/2),round(cols/2))] = 10
+# important parameter in tube reduction func
+amount_FS = len(FS)   
+print(amount_FS)
+print(f"The {amount_FS} nodes containing food are: {FS}")
+dR = ((np.pi*r)/(8*mu))/amount_FS                 # reduction of radius term. present in dRdt function           
+print(f'the adjuster dR term is:{dR}')
 
 ## ITERATION OF FLOW: we need a few paramaters defined;
 
@@ -171,7 +178,7 @@ def Adjust_radius(flow_per_tube):
     # applies drdt function,sigmoid minus constant, to every edge.
     # the increase is reduced because it lowers the dependence on randomness of the first few calculations.
     for u,v in G.edges():
-        G[u][v]['radius'] += 0.2*((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma) - dR
+        G[u][v]['radius'] += (r*((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma))/110 - dR*r/115
         if G[u][v]['radius'] < 0:
             G[u][v]['radius'] = 0       # ensure radius min caps at 0 
     return # returns nothing, simply adjusts existing edge attributes 'radius'
@@ -187,17 +194,30 @@ def Adjust_radius(flow_per_tube):
 
 # Convergence conditions: if statement: if there is a path in k paths of least resistance that takes more than 0.99
 # of the flow the network is converged.
-def Check_convergence(convergence, Q):
+def Check_convergence(convergence, Q): #both could work simultaniously
+    # Single path convergence
     for i in range(k):
-        if Q[i]>0.99:
+        if Q[i]>=0.95:
             convergence = True
+            print("last figure!")
+    #Time step convergence
+    if t >= 20000:
+        convergence = True
     return convergence
+
+# Clearing the network storage folder:
+directory_path = 'NumMet-Network-Design-Physarum-polycephalum-Ph/Network_iterations/pickle_testing'
+if os.path.exists(directory_path):
+    shutil.rmtree(directory_path)  # Remove the folder and all its contents
+os.makedirs(directory_path)  # Recreate the folder
+
 
 # ITER LOOP:
 while convergence == False:
+    print(f't={t}')
     # 1. Select nodes
     Nodes = select_source_and_sink_nodes(FS)
-    print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
+    #print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
 
     # 2. Re-Calc resistance and Find paths
     next_res = Calc_Resistance_of_all_tubes()
@@ -210,7 +230,7 @@ while convergence == False:
 
     # 4. divide flow
     Q = find_flow_distribution(resistance_of_paths_list)
-    print(f'the distribution of flow trough each path is: {Q}')
+    #print(f'the distribution of flow trough each path is: {Q}')
     #print(f'Sum is one check: {sum(Q.values())}')
     flow_per_tube = find_flow_per_tube(list_of_paths, Q)
     #print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
@@ -220,30 +240,81 @@ while convergence == False:
     radius_list = [G[u][v]['radius'] for u,v in G.edges]
     #print(f'the new radia are: {radius_list}')
 
-    # Draw the graph
-    plt.figure()
-    plt.title(f"Network at t={t}")
-    # normalize opacity
-    max_r = max(radius_list)
-    edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
-    edge_width = [(r/max_r)*2 for r in radius_list]
-    nx.draw(
-    G,
-    pos,
-    with_labels = False,
-    node_color = 'red',
-    node_size = 2,
-    width = edge_width,
-    )
-    t+=1
+    # Now we only really draw and save a plot every 100 timesteps
+    if t%1000 == 0:
+        # Draw the graph
+        plt.figure()
+        plt.title(f"Network at t={t}")
+        # normalize opacity
+        max_r = max(radius_list)
+        edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
+        edge_width = [(r/max_r)*2 for r in radius_list]
+        nx.draw(
+        G,
+        pos,
+        with_labels = False,
+        node_color = 'red',
+        node_size = 1,
+        width = edge_width,
+        )
+        # storing of every network
+        os.makedirs(directory_path, exist_ok= True)
+        filename = os.path.join(directory_path,f"network_at_{t}.png")
+        plt.savefig(filename)
+        plt.close()
+
     # Convergence check
     convergence = Check_convergence(convergence,Q)
-    # final composing
-    plt.show()
+    t+=1
+
+# ---
+#  7 Loading and displaying
+# ---
+# Now that the networks are getting elaborate we want a way to run the network uniteruptedly, storing every iter.
+# and displaying certain timesteps at the end.
+
+# loading a network
+# time_points = [0, 0.25, 0.5, 0.75, 1]
+# filename_load_1 = os.path.join(directory_path,f"network_at_{1}")
+# filename_load_2 = os.path.join(directory_path,f"network_at_{round(0.25*t)}")
+# filename_load_3 = os.path.join(directory_path,f"network_at_{round(0.5*t)}")
+# filename_load_4 = os.path.join(directory_path,f"network_at_{round(0.75*t)}")
+# filename_load_5 = os.path.join(directory_path,f"network_at_{t}")
+
+# with open(filename_load_1, 'rb') as file:
+#     G_1 = pickle.load(file)
+
+# with open(filename_load_2, 'rb') as file:
+#     G_2 = pickle.load(file)
+
+# with open(filename_load_3, 'rb') as file:
+#     G_3 = pickle.load(file)
+
+# with open(filename_load_4, 'rb') as file:
+#     G_4 = pickle.load(file)
+
+# with open(filename_load_5, 'rb') as file:
+#     G_5 = pickle.load(file)
+
 
     
+# # plotting
+# plt.figure(1)
+# plt.subplots(2,3)
+# plt.subplot(2,3,1)
+# nx.draw(G_1)
+# plt.subplot(2,3,2)
+# nx.draw(G_2)
+# plt.subplot(2,3,3)
+# nx.draw(G_3)
+# plt.subplot(2,3,4)
+# nx.draw(G_4)
+# plt.subplot(2,3,5)
+# nx.draw(G_5)
 
-
+# plt.tight_layout()
+# plt.figure(1)
+# plt.show()
 
 
 # ---
@@ -266,4 +337,3 @@ while convergence == False:
 # print(f'Sum is one check: {sum(Q.values())}')
 # flow_per_tube = find_flow_per_tube(list_of_paths, Q)
 # print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
-
