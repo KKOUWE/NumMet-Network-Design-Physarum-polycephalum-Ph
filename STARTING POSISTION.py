@@ -74,12 +74,15 @@ FS[((rows-1),0)] = 10
 FS[((rows-1),(cols-1))] = 10
 #FS[(round(rows/2),round(cols/2))] = 10
 # important parameter in tube reduction func
+
 amount_FS = len(FS)   
 print(amount_FS)
 print(f"The {amount_FS} nodes containing food are: {FS}")
-dR = ((np.pi*r)/(8*mu))/amount_FS                 # reduction of radius term. present in dRdt function           
+dR = (np.pi*r**4)/(8*mu)                 # reduction of radius term. present in dRdt function           
 print(f'the adjuster dR term is:{dR}')
 
+# extra list making for drawing purposes
+FS_list = list(FS.keys())
 ## ITERATION OF FLOW: we need a few paramaters defined;
 
 # Q_ij = pi*r^4(p_j-p_i)/8*mu*L_ij      -Poisseuille flow
@@ -178,7 +181,7 @@ def Adjust_radius(flow_per_tube):
     # applies drdt function,sigmoid minus constant, to every edge.
     # the increase is reduced because it lowers the dependence on randomness of the first few calculations.
     for u,v in G.edges():
-        G[u][v]['radius'] += (r*((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma))/110 - dR*r/115
+        G[u][v]['radius'] += 0.01*r*(((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma)) - dR*22.727     #scaled to r
         if G[u][v]['radius'] < 0:
             G[u][v]['radius'] = 0       # ensure radius min caps at 0 
     return # returns nothing, simply adjusts existing edge attributes 'radius'
@@ -197,11 +200,11 @@ def Adjust_radius(flow_per_tube):
 def Check_convergence(convergence, Q): #both could work simultaniously
     # Single path convergence
     for i in range(k):
-        if Q[i]>=0.95:
+        if Q[i]>=0.99:
             convergence = True
             print("last figure!")
     #Time step convergence
-    if t >= 20000:
+    if t >= 3000:
         convergence = True
     return convergence
 
@@ -241,20 +244,20 @@ while convergence == False:
     #print(f'the new radia are: {radius_list}')
 
     # Now we only really draw and save a plot every 100 timesteps
-    if t%1000 == 0:
+    if t%20 == 0:
         # Draw the graph
         plt.figure()
         plt.title(f"Network at t={t}")
         # normalize opacity
         max_r = max(radius_list)
         edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
-        edge_width = [(r/max_r)*2 for r in radius_list]
+        edge_width = [(r/max_r) for r in radius_list]
         nx.draw(
         G,
         pos,
         with_labels = False,
-        node_color = 'red',
-        node_size = 1,
+        node_color = ['blue' if node in FS_list else'red' for node in G.nodes()] ,
+        node_size = [50 if node in FS_list else 1 for node in G.nodes()] ,
         width = edge_width,
         )
         # storing of every network
