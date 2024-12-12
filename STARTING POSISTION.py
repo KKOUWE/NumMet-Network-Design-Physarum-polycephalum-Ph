@@ -15,15 +15,15 @@ import shutil
 G = nx.Graph()
 
 # Define the grid dimensions and constants
-rows, cols = 50,50
+rows, cols = 25,25
 min_distance = np.sqrt(2)+0.1       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
 r = 1E-3                            # starting radius for all tubes
 mu = 8.9E-4                         # dynamic viscocity of water (not 1 but yk)
 pos_dict = {}                       # posistion dictionary for every node
 sd = 0.2                            # standard deviation
-I_0 = 2                             # Normalized flow/current
-k = 6                               # number of paths
-gamma = 1.8                         # constant that determines non linearity of radius response to flow. Present in dRdt function.         
+I_0 = 3                           # Normalized flow/current
+k = 10                               # number of paths
+gamma = 1.15                        # constant that determines non linearity of radius response to flow. Present in dRdt function.         
 t = 0                               # timestep initialisation
 convergence = False                 # Convergence init.
 # Add nodes in a 10x10 grid
@@ -181,7 +181,7 @@ def Adjust_radius(flow_per_tube):
     # applies drdt function,sigmoid minus constant, to every edge.
     # the increase is reduced because it lowers the dependence on randomness of the first few calculations.
     for u,v in G.edges():
-        G[u][v]['radius'] += 0.01*r*(((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma)) - dR*22.727     #scaled to r
+        G[u][v]['radius'] += 0.1*r*(((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma)) - dR*300     #scaled to r
         if G[u][v]['radius'] < 0:
             G[u][v]['radius'] = 0       # ensure radius min caps at 0 
     return # returns nothing, simply adjusts existing edge attributes 'radius'
@@ -204,7 +204,7 @@ def Check_convergence(convergence, Q): #both could work simultaniously
             convergence = True
             print("last figure!")
     #Time step convergence
-    if t >= 3000:
+    if t >= 7000:
         convergence = True
     return convergence
 
@@ -276,67 +276,91 @@ while convergence == False:
 # Now that the networks are getting elaborate we want a way to run the network uniteruptedly, storing every iter.
 # and displaying certain timesteps at the end.
 
-# loading a network
-# time_points = [0, 0.25, 0.5, 0.75, 1]
-# filename_load_1 = os.path.join(directory_path,f"network_at_{1}")
-# filename_load_2 = os.path.join(directory_path,f"network_at_{round(0.25*t)}")
-# filename_load_3 = os.path.join(directory_path,f"network_at_{round(0.5*t)}")
-# filename_load_4 = os.path.join(directory_path,f"network_at_{round(0.75*t)}")
-# filename_load_5 = os.path.join(directory_path,f"network_at_{t}")
-
-# with open(filename_load_1, 'rb') as file:
-#     G_1 = pickle.load(file)
-
-# with open(filename_load_2, 'rb') as file:
-#     G_2 = pickle.load(file)
-
-# with open(filename_load_3, 'rb') as file:
-#     G_3 = pickle.load(file)
-
-# with open(filename_load_4, 'rb') as file:
-#     G_4 = pickle.load(file)
-
-# with open(filename_load_5, 'rb') as file:
-#     G_5 = pickle.load(file)
 
 
+# ---
+#  8  Data collection from last network
+# ---
+# in order to be able to make some quantative statements we need two parameters of the network to be extracted.
+# the cost parameter which will be represented by  the total length of the network. (TL)
+# the avarage mean distance of the network. (MD)
+# this will all be compared to the minimally spanning tree (MST), which we will compute first
+
+MST = nx.Graph()
+for node in FS_list:
+    MST.add_node(node,**G.nodes[node])
+
+pos_mst = nx.get_node_attributes(MST, 'pos')
+mst_1 = nx.mini
+plt.figure()
+nx.draw(MST, pos_mst)
+plt.show()
+
+
+
+plt.figure(1)
+plt.hist(radius_list,bins=500)
+plt.title('histogram of radius data to chose a lower limit')
+plt.xlabel('radia in meter')
+plt.ylabel('occurence rate')
+plt.show()
+# pick LL
+lower_limit = 2*r
+
+# TL
+def Get_TL():
     
-# # plotting
-# plt.figure(1)
-# plt.subplots(2,3)
-# plt.subplot(2,3,1)
-# nx.draw(G_1)
-# plt.subplot(2,3,2)
-# nx.draw(G_2)
-# plt.subplot(2,3,3)
-# nx.draw(G_3)
-# plt.subplot(2,3,4)
-# nx.draw(G_4)
-# plt.subplot(2,3,5)
-# nx.draw(G_5)
-
-# plt.tight_layout()
-# plt.figure(1)
-# plt.show()
+    included_edges_list = []
+    for u,v in G.edges:
+        if G[u][v]['radius'] > lower_limit:
+            included_edges_list.append(G[u][v]['length'])
+    
+    TL = sum(included_edges_list)
+    return TL
+TL = Get_TL()
+print(f'the total lentgh of the network is: {TL}')
 
 
-# ---
-#  T  Test code
-# ---
+# to find MD we will first clean our final network by removing all edges that are under the lower limit, plus thus will
+# be a good visual check of our final network.
+for u,v in G.edges():
+    if G[u][v]['radius'] < lower_limit:
+        G.remove_edge(u,v)
 
-# # 1. Select nodes
-# Nodes = select_source_and_sink_nodes(FS)
-# print(f"the source node is: {Nodes[0]} and the sink node is: {Nodes[1]}")
-# # 2. Find paths
+# Final plot
+plt.figure()
+plt.title(f"Network at t={t}")
+    # normalize opacity
+max_r = max(radius_list)
+edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
+edge_width = [(r/max_r) for r in radius_list]
+nx.draw(
+G,
+pos,
+with_labels = False,
+node_color = ['blue' if node in FS_list else'red' for node in G.nodes()] ,
+node_size = [50 if node in FS_list else 1 for node in G.nodes()] ,
+width = edge_width,
+)
+    # storing network
+os.makedirs(directory_path, exist_ok= True)
+filename = os.path.join(directory_path,f"network_at_{t}.png")
+plt.savefig(filename)
+plt.show()
 
-# list_of_paths = k_shortest_paths(G,Nodes,k)
-# print(f"the {k} shortest possible paths are:{list_of_paths}")
-# # 3. Calc resistance
-# resistance_of_paths_list = Resistance_of_paths(list_of_paths)
-# print(f"their respective resistances are: {resistance_of_paths_list}")
-# # 4. divide flow
-# Q = find_flow_distribution(resistance_of_paths_list)
-# print(f'the distribution of flow trough each path is: {Q}')
-# print(f'Sum is one check: {sum(Q.values())}')
-# flow_per_tube = find_flow_per_tube(list_of_paths, Q)
-# print(f'the amount of flow through each tube this iteration is: {flow_per_tube}')
+## get MD
+def Get_AMD():
+    distances_all_nodes = []
+    n = 0
+    for a in FS_list:
+        for b in FS_list:
+            if a !=b:
+                md_length = nx.shortest_path_length(G, a, b, weight='length')
+                distances_all_nodes.append(md_length)
+                n += 1
+    AMD = sum(distances_all_nodes)/n
+    return AMD
+
+AMD = Get_AMD()
+print(f'the average minimal distance of the network is: {AMD}')
+
