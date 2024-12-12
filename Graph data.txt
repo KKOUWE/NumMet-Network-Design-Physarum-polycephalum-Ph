@@ -1,6 +1,20 @@
 I_0 = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7]
-TL = [45842, x, x, x, x, x, 6310, x, x, x, x]
-AMD = [420, x, x, x, x, x, 547, x, x, x, x]
 
-TL = [45842, x, x, x, x, x, 6310, 5573, 6556, 6809, 7040, 7491, 6948]
-AMD = [420, x, x, x, x, x, 547, 514, 502, 538, 501, 558, 469]
+TL = [45842, 20701, 13847, 15276, 15429, 37711, 6310, 5573, 6556, 6809, 7040, 7491, 6948]
+AMD = [420, 443, 523, 508, 493, 424, 547, 514, 502, 538, 501, 558, 469]
+
+
+import matplotlib.pyplot as plt
+plt.figure(figsize=(10, 6))
+plt.scatter(AMD, TL, color='blue', edgecolor='black')
+
+for i, (amd, tl, i_0) in enumerate(zip(AMD, TL, I_0)):
+    plt.text(amd, tl, f"{i_0}", fontsize=9, ha='right', va='bottom')
+
+plt.xlabel('AMD', fontsize=12)
+plt.ylabel('TL', fontsize=12)
+plt.title('TL vs AMD with I_0 Labels', fontsize=14)
+plt.grid(True, linestyle='--', alpha=0.7)
+
+plt.tight_layout()
+plt.show()
