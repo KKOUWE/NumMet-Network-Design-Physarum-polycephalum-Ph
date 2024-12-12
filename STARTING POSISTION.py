@@ -15,15 +15,15 @@ import shutil
 G = nx.Graph()
 
 # Define the grid dimensions and constants
-rows, cols = 25,25
+rows, cols = 50,50
 min_distance = np.sqrt(2)+0.1       # bc network isnt rly scaled, Random interconnection around sqrt 2 gives good anwsers 
 r = 1E-3                            # starting radius for all tubes
 mu = 8.9E-4                         # dynamic viscocity of water (not 1 but yk)
 pos_dict = {}                       # posistion dictionary for every node
 sd = 0.2                            # standard deviation
-I_0 = 3                           # Normalized flow/current
-k = 10                               # number of paths
-gamma = 1.15                        # constant that determines non linearity of radius response to flow. Present in dRdt function.         
+I_0 = 6                           # Normalized flow/current
+k = 6                               # number of paths
+gamma = 1.8                        # constant that determines non linearity of radius response to flow. Present in dRdt function.         
 t = 0                               # timestep initialisation
 convergence = False                 # Convergence init.
 # Add nodes in a 10x10 grid
@@ -181,7 +181,7 @@ def Adjust_radius(flow_per_tube):
     # applies drdt function,sigmoid minus constant, to every edge.
     # the increase is reduced because it lowers the dependence on randomness of the first few calculations.
     for u,v in G.edges():
-        G[u][v]['radius'] += 0.1*r*(((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma)) - dR*300     #scaled to r
+        G[u][v]['radius'] += 0.01*r*(((flow_per_tube.get((u,v)))**gamma)/(1+(flow_per_tube.get((u,v)))**gamma)) - dR*30     #scaled to r
         if G[u][v]['radius'] < 0:
             G[u][v]['radius'] = 0       # ensure radius min caps at 0 
     return # returns nothing, simply adjusts existing edge attributes 'radius'
@@ -200,7 +200,7 @@ def Adjust_radius(flow_per_tube):
 def Check_convergence(convergence, Q): #both could work simultaniously
     # Single path convergence
     for i in range(k):
-        if Q[i]>=0.99:
+        if Q[i]>=0.99*I_0:
             convergence = True
             print("last figure!")
     #Time step convergence
@@ -244,7 +244,7 @@ while convergence == False:
     #print(f'the new radia are: {radius_list}')
 
     # Now we only really draw and save a plot every 100 timesteps
-    if t%20 == 0:
+    if t%50 == 0:
         # Draw the graph
         plt.figure()
         plt.title(f"Network at t={t}")
@@ -286,81 +286,80 @@ while convergence == False:
 # the avarage mean distance of the network. (MD)
 # this will all be compared to the minimally spanning tree (MST), which we will compute first
 
-MST = nx.Graph()
-for node in FS_list:
-    MST.add_node(node,**G.nodes[node])
+# MST = nx.Graph()
+# for node in FS_list:
+#     MST.add_node(node,**G.nodes[node])
 
-pos_mst = nx.get_node_attributes(MST, 'pos')
-mst_1 = nx.mini
-plt.figure()
-nx.draw(MST, pos_mst)
-plt.show()
-
+# pos_mst = nx.get_node_attributes(MST, 'pos')
+# plt.figure()
+# nx.draw(MST, pos_mst)
+# plt.show()
 
 
-plt.figure(1)
-plt.hist(radius_list,bins=500)
-plt.title('histogram of radius data to chose a lower limit')
-plt.xlabel('radia in meter')
-plt.ylabel('occurence rate')
-plt.show()
-# pick LL
-lower_limit = 2*r
 
-# TL
-def Get_TL():
+# plt.figure(1)
+# plt.hist(radius_list,bins=500)
+# plt.title('histogram of radius data to chose a lower limit')
+# plt.xlabel('radia in meter')
+# plt.ylabel('occurence rate')
+# plt.show()
+# # pick LL
+# lower_limit = 2*r
+
+# # TL
+# def Get_TL():
     
-    included_edges_list = []
-    for u,v in G.edges:
-        if G[u][v]['radius'] > lower_limit:
-            included_edges_list.append(G[u][v]['length'])
+#     included_edges_list = []
+#     for u,v in G.edges:
+#         if G[u][v]['radius'] > lower_limit:
+#             included_edges_list.append(G[u][v]['length'])
     
-    TL = sum(included_edges_list)
-    return TL
-TL = Get_TL()
-print(f'the total lentgh of the network is: {TL}')
+#     TL = sum(included_edges_list)
+#     return TL
+# TL = Get_TL()
+# print(f'the total lentgh of the network is: {TL}')
 
 
-# to find MD we will first clean our final network by removing all edges that are under the lower limit, plus thus will
-# be a good visual check of our final network.
-for u,v in G.edges():
-    if G[u][v]['radius'] < lower_limit:
-        G.remove_edge(u,v)
+# # to find MD we will first clean our final network by removing all edges that are under the lower limit, plus thus will
+# # be a good visual check of our final network.
+# for u,v in G.edges():
+#     if G[u][v]['radius'] < lower_limit:
+#         G.remove_edge(u,v)
 
-# Final plot
-plt.figure()
-plt.title(f"Network at t={t}")
-    # normalize opacity
-max_r = max(radius_list)
-edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
-edge_width = [(r/max_r) for r in radius_list]
-nx.draw(
-G,
-pos,
-with_labels = False,
-node_color = ['blue' if node in FS_list else'red' for node in G.nodes()] ,
-node_size = [50 if node in FS_list else 1 for node in G.nodes()] ,
-width = edge_width,
-)
-    # storing network
-os.makedirs(directory_path, exist_ok= True)
-filename = os.path.join(directory_path,f"network_at_{t}.png")
-plt.savefig(filename)
-plt.show()
+# # Final plot
+# plt.figure()
+# plt.title(f"Network at t={t}")
+#     # normalize opacity
+# max_r = max(radius_list)
+# edge_opacity = [r/max_r for r in radius_list]       # normalized [0,1]
+# edge_width = [(r/max_r) for r in radius_list]
+# nx.draw(
+# G,
+# pos,
+# with_labels = False,
+# node_color = ['blue' if node in FS_list else'red' for node in G.nodes()] ,
+# node_size = [50 if node in FS_list else 1 for node in G.nodes()] ,
+# width = edge_width,
+# )
+#     # storing network
+# os.makedirs(directory_path, exist_ok= True)
+# filename = os.path.join(directory_path,f"network_at_{t}.png")
+# plt.savefig(filename)
+# plt.show()
 
-## get MD
-def Get_AMD():
-    distances_all_nodes = []
-    n = 0
-    for a in FS_list:
-        for b in FS_list:
-            if a !=b:
-                md_length = nx.shortest_path_length(G, a, b, weight='length')
-                distances_all_nodes.append(md_length)
-                n += 1
-    AMD = sum(distances_all_nodes)/n
-    return AMD
+# ## get MD
+# def Get_AMD():
+#     distances_all_nodes = []
+#     n = 0
+#     for a in FS_list:
+#         for b in FS_list:
+#             if a !=b:
+#                 md_length = nx.shortest_path_length(G, a, b, weight='length')
+#                 distances_all_nodes.append(md_length)
+#                 n += 1
+#     AMD = sum(distances_all_nodes)/n
+#     return AMD
 
-AMD = Get_AMD()
-print(f'the average minimal distance of the network is: {AMD}')
+# AMD = Get_AMD()
+# print(f'the average minimal distance of the network is: {AMD}')
 
